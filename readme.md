@@ -1,4 +1,4 @@
-4.13 修改代码
+# 4.13 修改代码
 联合效用函数 
 $Utility = α * TargetValue + β * InfoGain - γ * Distance$
 
@@ -16,7 +16,7 @@ vlfm/policy/itm_policy.py       ITMPolicyV2类
 
 config/experiments/vlfm_objectnav_hm3d.yaml
 
-# 在配置文件中寻找类似策略参数的位置
+在配置文件中寻找类似策略参数的位置
 RL:
   POLICY:
     name: "ITMPolicyV2"
@@ -26,7 +26,7 @@ RL:
 
 
 
-# --- 在 sort_waypoints 的末尾，return 之前加上这些打印代码 ---
+--- 在 sort_waypoints 的末尾，return 之前加上这些打印代码 ---
         
         # 打印排名前 3 的边界点信息，用于 Debug
         print(f"\n--- 评估了 {len(waypoints)} 个候选边界点 ---")
@@ -45,7 +45,7 @@ RL:
         return sorted_frontiers, sorted_values
 
 
-# 修改 vlfm/policy/itm_policy.py 中的 _get_best_frontier 方法，让它把加上了距离惩罚后的真实状态显示在画面上
+修改 vlfm/policy/itm_policy.py 中的 _get_best_frontier 方法，让它把加上了距离惩罚后的真实状态显示在画面上
     def _get_best_frontier(
             self,
             observations: Union[Dict[str, Tensor], "TensorDict"],

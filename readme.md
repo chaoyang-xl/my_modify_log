@@ -5,13 +5,15 @@ $Utility = α * TargetValue + β * InfoGain - γ * Distance$
 
 语义相似度+IG信息增益
 
-vlfm/mapping/value_map.py
+vlfm/mapping/value_map.py  修改sort_waypoints函数 新增计算信息增益函数
 
 距离惩罚
+
 vlfm/policy/itm_policy.py       ITMPolicyV2类
 
 
 打开地同同步策略
+
 config/experiments/vlfm_objectnav_hm3d.yaml
 
 # 在配置文件中寻找类似策略参数的位置

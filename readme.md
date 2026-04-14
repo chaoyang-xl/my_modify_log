@@ -29,7 +29,7 @@ RL:
 
 
 
---- 在 sort_waypoints 的末尾，return 之前加上这些打印代码 ---
+---调试信息打印 在 sort_waypoints 的末尾，return 之前加上这些打印代码 ---
         
         # 打印排名前 3 的边界点信息，用于 Debug
         print(f"\n--- 评估了 {len(waypoints)} 个候选边界点 ---")
@@ -74,6 +74,55 @@ RL:
             print(f"最终决定前往: 坐标({best_frontier[0]:.2f}, {best_frontier[1]:.2f}) - {debug_str}")
 
             return best_frontier, best_value
+
+
+# 4.14 解决假阳性问题
+
+vlfm/mapping/object_point_cloud_map.py中     _extract_object_cloud方法
+
+        final_mask = cv2.erode(final_mask, None, iterations=self._erosion_size)  # type: ignore
+
+        # Filter invalid or unreliable depth regions before 3D projection.
+        depth_m = depth * (max_depth - min_depth) + min_depth
+        min_valid_depth_m = min_depth + 0.05
+        max_valid_depth_m = max_depth * 0.98
+        depth_valid_mask = (depth > 0.0) & (depth_m > min_valid_depth_m) & (depth_m < max_valid_depth_m)
+        final_mask = ((final_mask > 0) & depth_valid_mask).astype(np.uint8) * 255
+
+        if np.count_nonzero(final_mask) == 0:
+            return np.array([])
+        #####################
+        valid_depth = depth.copy()
+        
+_get_closest_point方法
+
+def _get_closest_point(self, cloud: np.ndarray, curr_position: np.ndarray) -> np.ndarray:
+        ndim = curr_position.shape[0]
+        if len(cloud) == 0:
+            if ndim == 2:
+                return np.array([curr_position[0], curr_position[1], 0.5, 0.0], dtype=np.float32)
+            return np.array([curr_position[0], curr_position[1], curr_position[2], 0.0], dtype=np.float32)
+
+        
+        if self.use_dbscan:
+            # Use a robust anchor from the nearest subset to suppress single-point outliers.
+            distances = np.linalg.norm(cloud[:, :ndim] - curr_position, axis=1)
+            num_near = max(10, int(0.2 * len(cloud)))
+            num_near = min(num_near, len(cloud))
+            if num_near == len(cloud):
+                near_cloud = cloud
+            else:
+                near_indices = np.argpartition(distances, num_near - 1)[:num_near]
+                near_cloud = cloud[near_indices]
+
+            anchor_xyz = np.median(near_cloud[:, :3], axis=0)
+            anchor_within_range = 1.0 if np.any(near_cloud[:, -1] == 1) else float(near_cloud[0, -1])
+            closest_point = np.concatenate((anchor_xyz, np.array([anchor_within_range], dtype=np.float32)))
+        else:
+        ########################################
+
+
+
 
 
 

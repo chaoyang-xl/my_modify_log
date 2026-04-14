@@ -80,46 +80,74 @@ RL:
 
 vlfm/mapping/object_point_cloud_map.py中     _extract_object_cloud方法
 
-        final_mask = cv2.erode(final_mask, None, iterations=self._erosion_size)  # type: ignore
 
-        # Filter invalid or unreliable depth regions before 3D projection.
-        depth_m = depth * (max_depth - min_depth) + min_depth
-        min_valid_depth_m = min_depth + 0.05
-        max_valid_depth_m = max_depth * 0.98
-        depth_valid_mask = (depth > 0.0) & (depth_m > min_valid_depth_m) & (depth_m < max_valid_depth_m)
-        final_mask = ((final_mask > 0) & depth_valid_mask).astype(np.uint8) * 255
-
-        if np.count_nonzero(final_mask) == 0:
-            return np.array([])
-        #####################
-        valid_depth = depth.copy()
+    def _extract_object_cloud(
+        self,
+        depth: np.ndarray,
+        object_mask: np.ndarray,
+        min_depth: float,
+        max_depth: float,
+        fx: float,
+        fy: float,
+    ) -> np.ndarray:
+        final_mask = object_mask * 255
+        final_mask = cv2.erode(final_mask, None, iterations=self._erosion_size)
         
-_get_closest_point方法
+        # === 核心逻辑：深度补全 (Depth Inpainting) ===
+        valid_depth = depth.copy()
+        physical_depth = depth * (max_depth - min_depth) + min_depth
+        
+        # 1. 找到掩码内“真正有效的物体深度”（排除极近的地板噪点和无效黑洞）
+        valid_pixel_mask = (final_mask > 0) & (depth > 0.0) & (physical_depth > 0.3)
+        valid_pixels = depth[valid_pixel_mask]
+        
+        # 2. 计算物体的真实深度中位数（比如电视边框的深度）
+        if len(valid_pixels) > 0:
+            fill_value = np.median(valid_pixels)
+        else:
+            fill_value = 1.0  # 兜底
+            
+        # 3. 将电视的“黑色空洞”用它自己的真实边框深度填满！
+        mask_holes = (final_mask > 0) & (depth == 0.0)
+        valid_depth[mask_holes] = fill_value
+        
+        # 4. 彻底抛弃那些贴脸的地板溢出噪点
+        depth_valid_mask = (physical_depth > 0.3) | mask_holes
+        final_mask = (final_mask * depth_valid_mask).astype(np.uint8)
+        
+        # 将归一化深度还原为物理米制
+        valid_depth = valid_depth * (max_depth - min_depth) + min_depth
+        
+        cloud = get_point_cloud(valid_depth, final_mask, fx, fy)
+        cloud = get_random_subarray(cloud, 5000)
+        if self.use_dbscan:
+            cloud = open3d_dbscan_filtering(cloud)
 
-def _get_closest_point(self, cloud: np.ndarray, curr_position: np.ndarray) -> np.ndarray:
+        return cloud
+
+    def _get_closest_point(self, cloud: np.ndarray, curr_position: np.ndarray) -> np.ndarray:
         ndim = curr_position.shape[0]
+        
+        # 空数组安全保护
         if len(cloud) == 0:
             if ndim == 2:
                 return np.array([curr_position[0], curr_position[1], 0.5, 0.0], dtype=np.float32)
             return np.array([curr_position[0], curr_position[1], curr_position[2], 0.0], dtype=np.float32)
 
+        # 计算所有点到机器人的距离
+        dists = np.linalg.norm(cloud[:, :ndim] - curr_position, axis=1)
         
         if self.use_dbscan:
-            # Use a robust anchor from the nearest subset to suppress single-point outliers.
-            distances = np.linalg.norm(cloud[:, :ndim] - curr_position, axis=1)
-            num_near = max(10, int(0.2 * len(cloud)))
-            num_near = min(num_near, len(cloud))
-            if num_near == len(cloud):
-                near_cloud = cloud
-            else:
-                near_indices = np.argpartition(distances, num_near - 1)[:num_near]
-                near_cloud = cloud[near_indices]
-
-            anchor_xyz = np.median(near_cloud[:, :3], axis=0)
-            anchor_within_range = 1.0 if np.any(near_cloud[:, -1] == 1) else float(near_cloud[0, -1])
-            closest_point = np.concatenate((anchor_xyz, np.array([anchor_within_range], dtype=np.float32)))
+            # 此时云团已经被 DBSCAN 清理得非常干净了。
+            # 为了防止最后残留一两个边缘点，我们跳过离得最近的 5% 的点，
+            # 并挑选一个【真实存在的点】作为目标，绝不拼凑坐标！
+            sorted_idx = np.argsort(dists)
+            skip_idx = min(int(len(cloud) * 0.05), len(cloud) - 1)
+            closest_point = cloud[sorted_idx[skip_idx]]
         else:
-        ########################################
+            closest_point = cloud[np.argmin(dists)]
+            
+        return closest_point
 
 
 

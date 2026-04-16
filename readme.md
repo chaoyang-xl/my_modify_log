@@ -20,10 +20,10 @@ config/experiments/vlfm_objectnav_hm3d.yaml
 
 
 
-RL:
-  POLICY:
-    name: "ITMPolicyV2"
-    sync_explored_areas: True  # 在这里设为 True
+vlfm/policy/itm_policy.py中
+
+
+sync_explored_areas: bool = True,
 
 
 
